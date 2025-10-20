@@ -1,0 +1,63 @@
+name: Security Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      manifests-path:
+        required: true
+        type: string
+      team:
+        required: true
+        type: string
+      policy-version:
+        required: true
+        type: string
+
+jobs:
+  security-deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }} # GitHub environment triggers approval for production if configured
+    steps:
+      - name: Checkout team repo
+        uses: actions/checkout@v4
+
+      - name: Checkout central-policy repo
+        uses: actions/checkout@v4
+        with:
+          repository: LuisDio/central-policy
+          path: central-policy
+          ref: ${{ inputs.policy-version }}
+
+      - name: Install Conftest
+        run: |
+          VERSION="0.55.0"
+          wget https://github.com/open-policy-agent/conftest/releases/download/v${VERSION}/conftest_Linux_x86_64.tar.gz
+          tar xzf conftest_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin
+          conftest --version
+
+      - name: Run OPA/Conftest on manifests
+        run: |
+          echo "Running policy checks for environment: ${{ inputs.environment }}"
+          conftest test ${{ inputs.manifests-path }} -p central-policy/k8s -o json > conftest-${{ inputs.environment }}.json
+
+      - name: Upload compliance artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ inputs.team }}-${{ inputs.environment }}-reports
+          path: conftest-${{ inputs.environment }}.json
+
+      - name: Deploy to Kubernetes
+        if: ${{ inputs.environment != 'production' }}
+        run: |
+          echo "Deploying to ${{ inputs.environment }}"
+          kubectl apply -f ${{ inputs.manifests-path }}
+
+      - name: Deploy to Production (manual approval)
+        if: ${{ inputs.environment == 'production' }}
+        run: |
+          echo "Production deployment requires manual approval in GitHub Environment"
+          kubectl apply -f ${{ inputs.manifests-path }}
