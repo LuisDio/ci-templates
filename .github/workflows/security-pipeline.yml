@@ -49,15 +49,3 @@ jobs:
         with:
           name: ${{ inputs.team }}-${{ inputs.environment }}-reports
           path: conftest-${{ inputs.environment }}.json
-
-      - name: Deploy to Kubernetes
-        if: ${{ inputs.environment != 'production' }}
-        run: |
-          echo "Deploying to ${{ inputs.environment }}"
-          kubectl apply -f ${{ inputs.manifests-path }}
-
-      - name: Deploy to Production (manual approval)
-        if: ${{ inputs.environment == 'production' }}
-        run: |
-          echo "Production deployment requires manual approval in GitHub Environment"
-          kubectl apply -f ${{ inputs.manifests-path }}
